@@ -1,5 +1,7 @@
 # Plaid Demo
 
+Connect to multiple bank accounts using the Plaid API
+
 ## Instructions
 
 1. Clone this repo:
