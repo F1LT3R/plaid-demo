@@ -407,8 +407,8 @@ const authStep = props => new Promise((resolve, reject) => {
         } else if (response) {
           console.log(chalk.green(`Passed authorization steps for ${institution.name}.`))
 
-          // delete accountData.stepMfaResponse
-          // delete accountData.connectMfaResponse
+          delete accountData.stepMfaResponse
+          delete accountData.connectMfaResponse
           data[institution.type] = accountData
           jsonfile.writeFileSync(WARNING_BANK_ACCESS_KEYS, data)
 
