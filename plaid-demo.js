@@ -145,10 +145,11 @@ const formatCurrency = (amount, type) => {
   let color
   const positive = value >=  0
   if (type === 'transaction') {
-    color = positive ? 'red' : 'green'
+    color = positive ? 'blue' : 'green'
   } else if (type === 'balance') {
     color = positive ? 'green' : 'red'
   }
+
   const locale = value.toLocaleString('en-US', {style: 'currency', currency: 'USD'})
 
   return `${chalk[color](locale)}`
