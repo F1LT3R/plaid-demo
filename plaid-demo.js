@@ -144,7 +144,7 @@ const formatCurrency = (amount, type) => {
 
   let color
   const positive = value >=  0
-  if (type = 'transaction') {
+  if (type === 'transaction') {
     color = positive ? 'red' : 'green'
   } else if (type === 'balance') {
     color = positive ? 'green' : 'red'
@@ -253,10 +253,6 @@ const performAccountAction = props => new Promise((resolve, reject) => {
 
   const hasOptions = JSON.stringify(options) !== "{}";
 
-  // console.log(action.method)
-  // console.log(accountData.access_token)
-  // console.log(options)
-
   if (hasOptions) {
     plaid_client[action.method](accountData.access_token, options, callback)
   } else {
@@ -288,9 +284,6 @@ const getCredentials = institution => new Promise((resolve, reject) => {
 const connectAccount = props => new Promise((resolve, reject) => {
   const {institution, accountData, credentials} = props
 
-  // console.log(institution)
-  // console.log(accountData)
-
   console.log(chalk.grey(`${chalk.italic('Connecting to')} ${institution.name}...`))
 
   plaid_client.addConnectUser(institution.type, credentials, null, (err, mfaResponse, response) => {
@@ -302,9 +295,6 @@ const connectAccount = props => new Promise((resolve, reject) => {
     }
 
     console.log(chalk.green('The connection to ${institution.name} was sucessful.'))
-
-    // console.log(mfaResponse)
-    // console.log(response)
 
     if (!accountData) {
       accountData = {}
@@ -321,12 +311,6 @@ const connectAccount = props => new Promise((resolve, reject) => {
       accountData.stepped = true
       accountData.access_token = response.access_token
     }
-
-    // console.log()
-    // console.log(accountData)
-
-    // console.log()
-    // console.log(JSON.stringify(data))
 
     data[institution.type] = accountData
     jsonfile.writeFileSync(WARNING_BANK_ACCESS_KEYS, data)
@@ -375,20 +359,16 @@ const authStep = props => new Promise((resolve, reject) => {
 
           resolve({institution, accountData})
         }
-        // else {
-        //   resolve({institution, accountData})
-        // }
       })
     })
     .catch(reject)
   } else {
-    // Bypass (already auth'ed)
     console.log(chalk.yellow(`No additional authorization steps are currently required for ${institution.name}.`))
     resolve({institution, accountData})
   }
 })
 
-// EXECUTE
+// CONTROL FLOW
 ////////////////////////////////////////////////////////////////////////////////
 
 getExtendedInstitutions()
@@ -411,12 +391,14 @@ getExtendedInstitutions()
     .then(credentials => new Promise((resolve, reject) => {
       return connectAccount({institution, accountData, credentials}).then(resolve).catch(reject)
     }))
+    // Cyclic (calls self until auth'd)
     .then(authStep)
     .then(resolve)
     .catch(reject)
   }
 
   if (needToStep) {
+    // Cyclic (calls self until auth'd)
     authStep({institution, accountData}).then(resolve).catch(err)
   }
 }))
@@ -424,7 +406,7 @@ getExtendedInstitutions()
 .then(performAccountAction)
 .then(console.log)
 .catch(err => {
-  console.log('\n----------------------')
+  console.log('\n---- [ ERROR DETAILS ] ------------------')
   console.log(err)
   console.error(err.stack)
   throw err
