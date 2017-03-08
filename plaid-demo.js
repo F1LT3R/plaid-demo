@@ -110,7 +110,12 @@ const selectInstitution = institutions => new Promise((resolve, reject) => {
 
 const getAccountState = institution => new Promise((resolve, reject) => {
     const title = institution.name
-    console.log('\n\n' + chalk.green(figlet.textSync(title, {font: settings.font})))
+
+    console.log(
+      '\n\n' +
+      chalk.green(figlet.textSync(title, {font: settings.font})) +
+      '\n'
+    )
 
   if (Reflect.has(data, institution.type)) {
     const accountData = data[institution.type]
@@ -118,7 +123,7 @@ const getAccountState = institution => new Promise((resolve, reject) => {
     console.log(chalk.green(`You HAVE connected to ${institution.name} previously.`))
 
     if (!accountData.stepped) {
-      console.log(chalk.red(`You must complete an AUTH step to get data for ${institution.name}.`))
+      console.log(chalk.blue(`You must complete an AUTH step to get data for ${institution.name}...`))
     }
 
     resolve({institution, accountData})
@@ -301,15 +306,18 @@ const connectAccount = props => new Promise((resolve, reject) => {
       accountData = {}
     }
 
+    accountData.name = institution.name
+
     if (mfaResponse) {
       accountData.connected = true
-      accountData.mfaResponse = mfaResponse
+      accountData.connectMfaResponse = mfaResponse
       accountData.access_token = mfaResponse.access_token
     }
 
     if (response) {
       accountData.connected = true
       accountData.stepped = true
+      accountData.connectMfaResponse = mfaResponse
       accountData.access_token = response.access_token
     }
 
@@ -322,18 +330,44 @@ const connectAccount = props => new Promise((resolve, reject) => {
 const authStep = props => new Promise((resolve, reject) => {
   const {institution, accountData} = props
 
-  if (accountData.mfaResponse) {
-    const mfaQuestion = accountData.mfaResponse.mfa[0].question
-    const access_token = accountData.mfaResponse.access_token
+  let mfa = null
+
+  if (accountData.connectMfaResponse) {
+    mfa = 'connect'
+  }
+  if (accountData.stepMfaResponse) {
+    mfa = 'step'
+  }
+
+  if (!mfa) {
+    console.log(chalk.yellow(`No additional authorization steps are currently required for ${institution.name}.`))
+    return resolve({institution, accountData})
+  }
+
+  if (accountData.connectMfaResponse || accountData.stepMfaResponse) {
+    let mfaQuestion
+    let access_token
+
+    if (mfa === 'connect') {
+      mfaQuestion = accountData.connectMfaResponse.mfa[0].question
+      access_token = accountData.connectMfaResponse.access_token
+    }
+    if (mfa === 'step') {
+      mfaQuestion = accountData.stepMfaResponse.mfa[0].question
+      access_token = accountData.stepMfaResponse.access_token
+    }
 
     const question = {
-      message: `${institution.name} > ${mfaQuestion}:`,
+      message: `${institution.name}: "${mfaQuestion}":`,
       name: 'mfaResponse'
     }
 
     enquirer.ask(question).then(answer => {
-      plaid_client.stepConnectUser(access_token, answer.mfaResponse, (err, mfaResponse, response) => {
+      const mfaAnswer = answer.mfaResponse
+
+      plaid_client.stepConnectUser(access_token, mfaAnswer, (err, mfaResponse, response) => {
         if (err) {
+          console.log()
           console.log(chalk.red.bold.underline(`${err.message.toUpperCase()}`))
           console.log(chalk.red.italic(`${err.resolve}`))
           console.log(chalk.red(`Code: ${err.code}`))
@@ -341,7 +375,7 @@ const authStep = props => new Promise((resolve, reject) => {
         }
 
         if (mfaResponse) {
-          accountData.mfaResponse = mfaResponse
+          accountData.stepMfaResponse = mfaResponse
           data[institution.type] = accountData
           jsonfile.writeFileSync(WARNING_BANK_ACCESS_KEYS, data)
 
@@ -354,7 +388,8 @@ const authStep = props => new Promise((resolve, reject) => {
         } else if (response) {
           console.log(chalk.green(`Passed authorization steps for ${institution.name}.`))
 
-          delete accountData.mfaResponse
+          // delete accountData.stepMfaResponse
+          // delete accountData.stepMfaResponse
           data[institution.type] = accountData
           jsonfile.writeFileSync(WARNING_BANK_ACCESS_KEYS, data)
 
@@ -363,9 +398,6 @@ const authStep = props => new Promise((resolve, reject) => {
       })
     })
     .catch(reject)
-  } else {
-    console.log(chalk.yellow(`No additional authorization steps are currently required for ${institution.name}.`))
-    resolve({institution, accountData})
   }
 })
 
@@ -400,7 +432,7 @@ getExtendedInstitutions()
 
   if (needToStep) {
     // Cyclic (calls self until auth'd)
-    authStep({institution, accountData}).then(resolve).catch(err)
+    authStep({institution, accountData}).then(resolve).catch(reject)
   }
 }))
 .then(chooseAccountAction)
