@@ -4,6 +4,7 @@
 // Your Client ID & Secret: https://dashboard.plaid.com/overview
 
 const settings = {
+  font: 'Big Money-ne',
   client_id: process.env.plaid_client_id,
   secret: process.env.plaid_secret,
   environment: 'tartan'
@@ -19,6 +20,7 @@ const plaid = require('plaid')
 const chalk = require('chalk')
 const jsonfile = require('jsonfile')
 const Table = require('cli-table')
+const figlet = require('figlet')
 
 const Enquirer = require('enquirer')
 const Question = require('prompt-question')
@@ -41,11 +43,10 @@ const plaid_client = new plaid.Client(
   settings.client_id,
   settings.secret,
   plaid_env
-);
+)
 
 const WARNING_BANK_ACCESS_KEYS = path.join('.', 'WARNING_BANK_ACCESS_KEYS.json')
 const data = jsonfile.readFileSync(WARNING_BANK_ACCESS_KEYS)
-
 
 // PROGRAM
 ////////////////////////////////////////////////////////////////////////////////
@@ -87,7 +88,7 @@ const getCommonInstitutions = extendedInstitutions => new Promise((resolve, reje
 })
 
 const selectInstitution = institutions => new Promise((resolve, reject) => {
-  const questionText = 'Select institution to access'
+  const questionText = 'Select institution to access:'
 
   const institutionList = institutions.map(institution => institution.name)
 
@@ -108,14 +109,18 @@ const selectInstitution = institutions => new Promise((resolve, reject) => {
 })
 
 const getAccountState = institution => new Promise((resolve, reject) => {
+    const title = institution.name
+    console.log('\n\n' + chalk.green(figlet.textSync(title, {font: settings.font})))
+
   if (Reflect.has(data, institution.type)) {
+    const accountData = data[institution.type]
+
     console.log(chalk.green(`You HAVE connected to ${institution.name} previously.`))
 
-    if (!data.stepped) {
+    if (!accountData.stepped) {
       console.log(chalk.red(`You must complete an AUTH step to get data for ${institution.name}.`))
     }
 
-    const accountData = data[institution.type]
     resolve({institution, accountData})
   } else {
     console.log(chalk.yellow(`You have NOT connected to ${institution.name} before.`))
@@ -130,11 +135,22 @@ const getAccountState = institution => new Promise((resolve, reject) => {
   }
 })
 
-const formatCurrency = amount => {
+const formatCurrency = (amount, type) => {
   const value = parseFloat(amount, 10)
+
+  if (Number.isNaN(value)) {
+    return amount || '';
+  }
+
+  let color
   const positive = value >=  0
-  const color = positive ? 'green' : 'red'
+  if (type = 'transaction') {
+    color = positive ? 'red' : 'green'
+  } else if (type === 'balance') {
+    color = positive ? 'green' : 'red'
+  }
   const locale = value.toLocaleString('en-US', {style: 'currency', currency: 'USD'})
+
   return `${chalk[color](locale)}`
 }
 
@@ -143,7 +159,7 @@ const accountActions = [
     text: 'Show current balance',
     method: 'getBalance',
     success: (institution, accountData, res) => new Promise ((resolve, reject) => {
-      console.log(chalk.green(institution.name))
+      console.log(chalk.green(`${institution.name} Balance`))
 
       const table = new Table({
          style: {head: ['grey']},
@@ -155,8 +171,8 @@ const accountActions = [
         table.push([
           account.meta.name,
           account.meta.number,
-          formatCurrency(account.balance.current),
-          formatCurrency(account.balance.available),
+          formatCurrency(account.balance.current, 'balance'),
+          formatCurrency(account.balance.available, 'balance'),
           account.type
         ])
       })
@@ -171,7 +187,7 @@ const accountActions = [
     method: 'getConnectUser',
     gte: '7 days ago',
     success: (institution, accountData, res) => new Promise ((resolve, reject) => {
-      console.log(chalk.green(institution.name))
+      console.log(chalk.green(`${institution.name} Recent Transactions (7 days)`))
       console.log(chalk.grey(`You have ${res.transactions.length} transactions in the last 7 days.`));
 
       const table = new Table({
@@ -184,7 +200,7 @@ const accountActions = [
         table.push([
           item.date,
           chalk.italic(item.name),
-          formatCurrency(item.amount)
+          formatCurrency(item.amount, 'transaction')
         ])
       })
 
@@ -197,7 +213,7 @@ const accountActions = [
 const chooseAccountAction = props => new Promise((resolve, reject) => {
   const {institution, accountData} = props
 
-  const questionText = 'Which action would you like to perform?'
+  const questionText = 'Select the action would you like to perform:'
 
   const actionList = accountActions.map(action => action.text)
 
@@ -255,11 +271,11 @@ const getCredentials = institution => new Promise((resolve, reject) => {
     const credentialName = institution.credentials[key]
 
     const question = {
-      message: `${institution.name} ${credentialName}`,
+      message: `${institution.name} ${credentialName}:`,
       name: key
     }
 
-    if (key === 'password') {
+    if (key === 'password' || key === 'pin') {
       question.type = 'password'
     }
 
@@ -284,6 +300,8 @@ const connectAccount = props => new Promise((resolve, reject) => {
       console.log(chalk.red(`Code: ${err.code}`))
       return reject(err)
     }
+
+    console.log(chalk.green('The connection to ${institution.name} was sucessful.'))
 
     // console.log(mfaResponse)
     // console.log(response)
@@ -324,7 +342,7 @@ const authStep = props => new Promise((resolve, reject) => {
     const access_token = accountData.mfaResponse.access_token
 
     const question = {
-      message: `${institution.name}: ${mfaQuestion}`,
+      message: `${institution.name} > ${mfaQuestion}:`,
       name: 'mfaResponse'
     }
 
@@ -340,35 +358,32 @@ const authStep = props => new Promise((resolve, reject) => {
         if (mfaResponse) {
           accountData.mfaResponse = mfaResponse
           data[institution.type] = accountData
-          console.log()
-          console.log(JSON.stringify(data))
           jsonfile.writeFileSync(WARNING_BANK_ACCESS_KEYS, data)
+
           return authStep({institution, accountData})
             .then(finalData => {
-              console.log('finalData')
-              console.log(finalData)
               resolve(finalData)
             }).catch(err => {
               reject(err)
             })
         } else if (response) {
-          console.log('Passed auth steps! :)')
-          console.log(response)
+          console.log(chalk.green(`Passed authorization steps for ${institution.name}.`))
+
           delete accountData.mfaResponse
           data[institution.type] = accountData
-          console.log()
-          console.log(JSON.stringify(data))
           jsonfile.writeFileSync(WARNING_BANK_ACCESS_KEYS, data)
 
           resolve({institution, accountData})
-        } else {
-          resolve({institution, accountData})
         }
+        // else {
+        //   resolve({institution, accountData})
+        // }
       })
     })
     .catch(reject)
   } else {
     // Bypass (already auth'ed)
+    console.log(chalk.yellow(`No additional authorization steps are currently required for ${institution.name}.`))
     resolve({institution, accountData})
   }
 })
@@ -392,11 +407,12 @@ getExtendedInstitutions()
   }
 
   if (needToConnect) {
-    return getCredentials(institution)
+    getCredentials(institution)
     .then(credentials => new Promise((resolve, reject) => {
-      connectAccount({institution, accountData, credentials}).then(resolve).catch(reject)
+      return connectAccount({institution, accountData, credentials}).then(resolve).catch(reject)
     }))
     .then(authStep)
+    .then(resolve)
     .catch(reject)
   }
 
