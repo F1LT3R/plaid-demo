@@ -294,13 +294,28 @@ const connectAccount = props => new Promise((resolve, reject) => {
 
   plaid_client.addConnectUser(institution.type, credentials, null, (err, mfaResponse, response) => {
     if (err) {
-      console.log(chalk.red.bold.underline(`${err.message.toUpperCase()}`))
+      console.log()
+      console.log(chalk.bgRed.white.bold(` ${err.message.toUpperCase()} `))
       console.log(chalk.red.italic(`${err.resolve}`))
       console.log(chalk.red(`Code: ${err.code}`))
-      return reject(err)
+      console.log()
+
+      if (err.code == 1200) {
+        return getCredentials(institution)
+        .then(credentials => new Promise((resolve, reject) => {
+          connectAccount({institution, accountData, credentials})
+          .then(resolve)
+          .catch(reject)
+        }))
+        .then(authStep)
+        .then(resolve)
+        .catch(reject)
+      } else {
+        return reject(err)
+      }
     }
 
-    console.log(chalk.green('The connection to ${institution.name} was sucessful.'))
+    console.log(chalk.green(`The connection to ${institution.name} was sucessful.`))
 
     if (!accountData) {
       accountData = {}
@@ -317,7 +332,7 @@ const connectAccount = props => new Promise((resolve, reject) => {
     if (response) {
       accountData.connected = true
       accountData.stepped = true
-      accountData.connectMfaResponse = mfaResponse
+      accountData.connectResponse = response
       accountData.access_token = response.access_token
     }
 
@@ -334,8 +349,7 @@ const authStep = props => new Promise((resolve, reject) => {
 
   if (accountData.connectMfaResponse && !accountData.stepMfaResponse) {
     mfa = 'connect'
-  }
-  if (accountData.stepMfaResponse) {
+  } else if (accountData.stepMfaResponse) {
     mfa = 'step'
   }
 
@@ -348,14 +362,8 @@ const authStep = props => new Promise((resolve, reject) => {
     let mfaQuestion
     let access_token
 
-    if (mfa === 'connect') {
-      mfaQuestion = accountData.connectMfaResponse.mfa[0].question
-      access_token = accountData.connectMfaResponse.access_token
-    }
-    if (mfa === 'step') {
-      mfaQuestion = accountData.stepMfaResponse.mfa[0].question
-      access_token = accountData.stepMfaResponse.access_token
-    }
+    mfaQuestion = accountData[mfa + 'MfaResponse'].mfa[0].question
+    access_token = accountData[mfa + 'MfaResponse'].access_token
 
     const question = {
       message: `${institution.name}: "${mfaQuestion}":`,
@@ -369,7 +377,8 @@ const authStep = props => new Promise((resolve, reject) => {
         if (err) {
           console.log()
           console.log(chalk.bgRed.white.bold(` ${err.message.toUpperCase()} `))
-          console.log(chalk.red(`CODE ${err.code}: `) + chalk.red.italic(`"${err.resolve}"`))
+          console.log(chalk.red.italic(`${err.resolve}`))
+          console.log(chalk.red(`Code: ${err.code}`))
           console.log()
 
           if (err.code == 1203) {
@@ -399,7 +408,7 @@ const authStep = props => new Promise((resolve, reject) => {
           console.log(chalk.green(`Passed authorization steps for ${institution.name}.`))
 
           // delete accountData.stepMfaResponse
-          // delete accountData.stepMfaResponse
+          // delete accountData.connectMfaResponse
           data[institution.type] = accountData
           jsonfile.writeFileSync(WARNING_BANK_ACCESS_KEYS, data)
 
