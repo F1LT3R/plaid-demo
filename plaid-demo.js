@@ -332,7 +332,7 @@ const authStep = props => new Promise((resolve, reject) => {
 
   let mfa = null
 
-  if (accountData.connectMfaResponse) {
+  if (accountData.connectMfaResponse && !accountData.stepMfaResponse) {
     mfa = 'connect'
   }
   if (accountData.stepMfaResponse) {
@@ -368,10 +368,20 @@ const authStep = props => new Promise((resolve, reject) => {
       plaid_client.stepConnectUser(access_token, mfaAnswer, (err, mfaResponse, response) => {
         if (err) {
           console.log()
-          console.log(chalk.red.bold.underline(`${err.message.toUpperCase()}`))
-          console.log(chalk.red.italic(`${err.resolve}`))
-          console.log(chalk.red(`Code: ${err.code}`))
-          return reject(err)
+          console.log(chalk.bgRed.white.bold(` ${err.message.toUpperCase()} `))
+          console.log(chalk.red(`CODE ${err.code}: `) + chalk.red.italic(`"${err.resolve}"`))
+          console.log()
+
+          if (err.code == 1203) {
+            return authStep({institution, accountData})
+              .then(finalData => {
+                resolve(finalData)
+              }).catch(err => {
+                reject(err)
+            })
+          } else {
+            return reject(err)
+          }
         }
 
         if (mfaResponse) {
